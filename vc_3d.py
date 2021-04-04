@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
-####################################################################################################
-# Orion
+#################################################################################
+# Fedorenko
 # 
-# Copyright (C) 2020, Roshan J. Samuel
+# Copyright (C) 2021, Roshan J. Samuel
 #
 # All rights reserved.
 # 
@@ -29,12 +29,12 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-####################################################################################################
+#################################################################################
 
 # Import all necessary modules
-from orion import meshData as grid
-from orion import globalVars as gv
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 ############################### GLOBAL VARIABLES ################################
 

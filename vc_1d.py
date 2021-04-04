@@ -1,9 +1,9 @@
 #!/usr/bin/python3
 
 #################################################################################
-# MG-Lite
+# Fedorenko
 # 
-# Copyright (C) 2020, Roshan J. Samuel
+# Copyright (C) 2021, Roshan J. Samuel
 #
 # All rights reserved.
 # 
