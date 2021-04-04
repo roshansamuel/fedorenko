@@ -334,12 +334,12 @@ def initDirichlet():
 
     halfIndX = int(n/2) + 1
 
-    for i in range(n):
+    for i in range(n + 2):
         xDist = hx[0]*(i - halfIndX)
         pAnlt[i] = xDist*xDist/2.0
 
     # Value of P at wall according to analytical solution
-    pWallX = pAnlt[0]
+    pWallX = pAnlt[1]
 
 
 ############################### PLOTTING ROUTINE ################################

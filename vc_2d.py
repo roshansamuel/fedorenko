@@ -38,6 +38,30 @@ from matplotlib.ticker import MaxNLocator
 
 ############################### GLOBAL VARIABLES ################################
 
+# Choose the grid sizes as indices from below list so that there are 2^n + 3 grid points
+# Size index: 0 1 2 3  4  5  6  7   8   9   10   11   12   13    14
+# Grid sizes: 2 3 5 9 17 33 65 129 257 513 1025 2049 4097 8193 16385
+sInd = np.array([6, 6])
+
+# Depth of each V-cycle in multigrid (ideally VDepth = sInd - 1)
+VDepth = min(sInd) - 1
+
+# Number of V-cycles to be computed
+vcCnt = 10
+
+# Number of iterations during pre-smoothing
+preSm = 3
+
+# Number of iterations during post-smoothing
+pstSm = 3
+
+# Tolerance value for iterative solver
+tolerance = 1.0e-6
+
+# N should be of the form 2^n + 1
+# Then there will be 2^n + 3 points in total, including 2 ghost points
+sLst = [2**x + 1 for x in range(12)]
+
 # Get array of grid sizes are tuples corresponding to each level of V-Cycle
 N = [(sLst[x[0]], sLst[x[1]]) for x in [sInd - y for y in range(VDepth + 1)]]
 
@@ -208,7 +232,7 @@ def calcResidual():
     iTemp[vLev][1:-1, 1:-1] = rData[vLev] - laplace(pData[vLev])
 
 
-# Reduces the size of the array to a lower level, 2^(n - 1) + 1
+# Restricts the data from an array of size 2^n + 1 to a smaller array of size 2^(n - 1) + 1
 def restrict():
     global N
     global vLev
@@ -227,7 +251,7 @@ def restrict():
                                   0.0625*(iTemp[pLev][i2 - 2, k2 - 2] + iTemp[pLev][i2, k2 - 2] + iTemp[pLev][i2 - 2, k2] + iTemp[pLev][i2, k2])
 
 
-# Solves at coarsest level using an iterative solver
+# Solves at coarsest level using the Gauss-Seidel iterative solver
 def solve():
     global N, vLev
     global gsFactor
@@ -262,7 +286,7 @@ def solve():
     imposeBC(pData[vLev])
 
 
-# Increases the size of the array to a higher level, 2^(n + 1) + 1
+# Interpolates the data from an array of size 2^n + 1 to a larger array of size 2^(n + 1) + 1
 def prolong():
     global N
     global vLev
@@ -310,21 +334,6 @@ def laplace(function):
 def imposeBC(P):
     global zeroBC
     global pWallX, pWallZ
-
-    '''
-    # Neumann BC
-    # Left Wall
-    P[0, :] = P[2, :]
-
-    # Right Wall
-    P[-1, :] = P[-3, :]
-
-    # Bottom Wall
-    P[:, 0] = P[:, 2]
-
-    # Top Wall
-    P[:, -1] = P[:, -3]
-    '''
 
     # Dirichlet BC
     if zeroBC:
@@ -383,4 +392,62 @@ def initDirichlet():
     # Value of P at walls according to analytical solution
     pWallX = pAnlt[1, :]
     pWallZ = pAnlt[:, 1]
+
+
+############################### PLOTTING ROUTINE ################################
+
+
+# plotType = 0: Plot computed and analytic solution together
+# plotType = 1: Plot error in computed solution w.r.t. analytic solution
+# plotType = 2: Plot convergence of residual against V-Cycles
+# Any other value for plotType, and the function will barf.
+def plotResult(plotType):
+    global N
+    global pAnlt
+    global pData
+    global rConv
+
+    plt.rcParams["font.family"] = "Times New Roman"
+    plt.rcParams["mathtext.fontset"] = 'cm'
+    plt.rcParams["font.weight"] = "medium"
+
+    plt.figure(figsize=(13, 9))
+
+    n = N[0]
+    xPts = np.linspace(-0.5, 0.5, n[0]+1)
+
+    pSoln = pData[0]
+    # Plot the computed solution on top of the analytic solution.
+    if plotType == 0:
+        plt.plot(xPts, pAnlt, label='Analytic', marker='*', markersize=20, linewidth=4)
+        plt.plot(xPts, pSoln[1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
+        plt.xlabel('x', fontsize=40)
+        plt.ylabel('p', fontsize=40)
+
+    # Plot the error in computed solution with respect to analytic solution.
+    elif plotType == 1:
+        pErr = np.abs(pAnlt - pSoln[1:-1])
+        plt.semilogy(xPts, pErr, label='Error', marker='*', markersize=20, linewidth=4)
+        plt.xlabel('x', fontsize=40)
+        plt.ylabel('e_p', fontsize=40)
+
+    # Plot the convergence of residual
+    elif plotType == 2:
+        vcAxis = np.arange(len(rConv)) + 1
+        plt.semilogy(vcAxis, rConv, label='Residual', marker='*', markersize=20, linewidth=4)
+        plt.xlabel('V-Cycles', fontsize=40)
+        plt.ylabel('Residual', fontsize=40)
+
+    axes = plt.gca()
+    axes.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+    plt.xticks(fontsize=30)
+    plt.yticks(fontsize=30)
+    plt.legend(fontsize=40)
+    plt.show()
+
+############################## THAT'S IT, FOLKS!! ###############################
+
+if __name__ == '__main__':
+    main()
 

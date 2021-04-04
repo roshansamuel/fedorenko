@@ -294,15 +294,6 @@ def imposeBC(P):
     global zeroBC
     global pWallX
 
-    '''
-    # Neumann BC
-    # Left Wall
-    P[0] = P[1]
-
-    # Right Wall
-    P[-1] = P[-2]
-    '''
-
     # Dirichlet BC
     if zeroBC:
         # Homogenous BC

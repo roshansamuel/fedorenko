@@ -322,21 +322,6 @@ def imposeBC(P):
     global zeroBC
     global pWallX, pWallZ
 
-    '''
-    # Neumann BC
-    # Left Wall
-    P[0, :] = P[1, :]
-
-    # Right Wall
-    P[-1, :] = P[-2, :]
-
-    # Bottom Wall
-    P[:, 0] = P[:, 1]
-
-    # Top Wall
-    P[:, -1] = P[:, -2]
-    '''
-
     # Dirichlet BC
     if zeroBC:
         # Homogenous BC
@@ -365,6 +350,39 @@ def imposeBC(P):
 
         # Top Wall
         P[:, -1] = 2.0*pWallZ - P[:, -2]
+
+
+############################### TEST CASE DETAIL ################################
+
+
+# Calculate the analytical solution and its corresponding Dirichlet BC values
+def initDirichlet():
+    global N
+    global hx, hz
+    global pAnlt, pData
+    global pWallX, pWallZ
+
+    n = N[0]
+
+    # Compute analytical solution, (r^2)/4
+    pAnlt = np.zeros_like(pData[0])
+
+    halfIndX = (n[0] + 1)/2
+    halfIndZ = (n[1] + 1)/2
+
+    xLen, zLen = 0.5, 0.5
+    pWallX = np.zeros(n[0] + 2)
+    pWallZ = np.zeros(n[1] + 2)
+    for i in range(n[0] + 2):
+        xDist = hx[0]*(i - halfIndX)
+        for j in range(n[1] + 2):
+            zDist = hz[0]*(j - halfIndZ)
+            pAnlt[i, j] = (xDist*xDist + zDist*zDist)/4.0
+
+            pWallX[j] = (xLen*xLen + zDist*zDist)/4.0
+
+        pWallZ[i] = (xDist*xDist + zLen*zLen)/4.0
+
 
 
 ############################### PLOTTING ROUTINE ################################
@@ -418,39 +436,6 @@ def plotResult(plotType):
     plt.yticks(fontsize=30)
     plt.legend(fontsize=40)
     plt.show()
-
-
-############################### TEST CASE DETAIL ################################
-
-
-# Calculate the analytical solution and its corresponding Dirichlet BC values
-def initDirichlet():
-    global N
-    global hx, hz
-    global pAnlt, pData
-    global pWallX, pWallZ
-
-    n = N[0]
-
-    # Compute analytical solution, (r^2)/4
-    pAnlt = np.zeros_like(pData[0])
-
-    halfIndX = (n[0] + 1)/2
-    halfIndZ = (n[1] + 1)/2
-
-    xLen, zLen = 0.5, 0.5
-    pWallX = np.zeros(n[0] + 2)
-    pWallZ = np.zeros(n[1] + 2)
-    for i in range(n[0] + 2):
-        xDist = hx[0]*(i - halfIndX)
-        for j in range(n[1] + 2):
-            zDist = hz[0]*(j - halfIndZ)
-            pAnlt[i, j] = (xDist*xDist + zDist*zDist)/4.0
-
-            pWallX[j] = (xLen*xLen + zDist*zDist)/4.0
-
-        pWallZ[i] = (xDist*xDist + zLen*zLen)/4.0
-
 
 ############################## THAT'S IT, FOLKS!! ###############################
 
