@@ -38,7 +38,7 @@ from matplotlib.ticker import MaxNLocator
 
 ############################### GLOBAL VARIABLES ################################
 
-# Choose grid size as an index from below list
+# Choose the grid size as an index from below list so that there are 2^n + 2 grid points
 # Size index: 0 1 2 3  4  5  6  7   8   9   10   11   12   13    14
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
 sInd = 9
@@ -50,10 +50,10 @@ VDepth = sInd - 1
 vcCnt = 10
 
 # Number of iterations during pre-smoothing
-preSm = 2
+preSm = 3
 
 # Number of iterations during post-smoothing
-pstSm = 2
+pstSm = 3
 
 # Tolerance value for iterative solver
 tolerance = 1.0e-6
@@ -78,12 +78,14 @@ maxCount = 10*sLst[sInd]
 # Integer specifying the level of V-cycle at any point while solving
 vLev = 0
 
+# Flag to determine if non-zero homogenous BC has to be applied or not
+zeroBC = False
+
 ##################################### MAIN ######################################
 
 def main():
     global N
-    global xPts
-    global pData, pAnlt
+    global pData
     global rData, sData, iTemp
 
     nList = np.array(N)
@@ -94,25 +96,15 @@ def main():
     sData = [np.zeros_like(x) for x in pData]
     iTemp = [np.zeros_like(x) for x in rData]
 
-    xPts = np.linspace(-0.5, 0.5, N[0])
+    initDirichlet()
 
-    mgRHS = np.zeros(N[0] + 2)
-
-    # RHS is merely x over -0.5 to 0.5
-    mgRHS[1:-1] = xPts
+    mgRHS = np.ones_like(pData[0])
 
     # Solve
     mgLHS = multigrid(mgRHS)
 
     # Normalize solution for Neumann BC
-    mgLHS -= np.mean(mgLHS[1:-1])
-
-    # Analytical solution
-    pAnlt = xPts*xPts*xPts/6.0 - xPts/8.0
-
-    solError = np.max(np.abs(pAnlt - mgLHS[1:-1]))
-
-    print("Error in computed solution is {0:.4e}".format(solError))
+    #mgLHS -= np.mean(mgLHS[1:-1])
 
     plotResult(2)
 
@@ -125,6 +117,7 @@ def multigrid(H):
     global N
     global vcCnt
     global rConv
+    global pAnlt
     global pData, rData
 
     rData[0] = H[1:-1]
@@ -138,22 +131,27 @@ def multigrid(H):
         resVal = np.amax(np.abs(H[1:-1] - chMat))
         rConv[i] = resVal
 
-        print("Residual after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, resVal))
+        print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
+
+    errVal = np.amax(np.abs(pAnlt[1:-1] - pData[0][1:-1]))
+    print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
 
     return pData[0]
 
 
 # Multigrid V-cycle without the use of recursion
 def v_cycle():
-    global vLev
     global VDepth
+    global vLev, zeroBC
     global pstSm, preSm
 
     vLev = 0
+    zeroBC = False
 
     # Pre-smoothing
     smooth(preSm)
 
+    zeroBC = True
     for i in range(VDepth):
         # Compute residual
         calcResidual()
@@ -169,8 +167,8 @@ def v_cycle():
 
         # If the coarsest level is reached, solve. Otherwise, keep smoothing!
         if vLev == VDepth:
-            #solve()
-            smooth(preSm)
+            solve()
+            #smooth(preSm)
         else:
             smooth(preSm)
 
@@ -181,6 +179,12 @@ def v_cycle():
 
         # Add previously stored smoothed data
         pData[vLev] += sData[vLev]
+
+        # Apply homogenous BC so long as we are not at finest mesh (at which vLev = 0)
+        if vLev:
+            zeroBC = True
+        else:
+            zeroBC = False
 
         # Post-smoothing
         smooth(pstSm)
@@ -194,12 +198,12 @@ def smooth(sCount):
     global rData, pData
 
     n = N[vLev]
-    for i in range(sCount):
+    for iCnt in range(sCount):
         imposeBC(pData[vLev])
 
         # Gauss-Seidel smoothing
         for j in range(1, n+1):
-            pData[vLev][j] = (pData[vLev][j+1] + pData[vLev][j-1] - hx2[vLev]*rData[vLev][j-1])*0.5
+            pData[vLev][j] = (pData[vLev][j+1] + pData[vLev][j-1] - hx2[vLev]*rData[vLev][j-1])/2
 
     imposeBC(pData[vLev])
 
@@ -213,7 +217,7 @@ def calcResidual():
     iTemp[vLev] = rData[vLev] - laplace(pData[vLev])
 
 
-# Restricts the data from an array of size 2^n + 1 to a smaller array of size 2^(n - 1) + 1
+# Restricts the data from an array of size 2^n to a smaller array of size 2^(n - 1)
 def restrict():
     global N
     global vLev
@@ -240,31 +244,25 @@ def solve():
 
     jCnt = 0
     while True:
-        #imposeBC(pData[vLev])
+        imposeBC(pData[vLev])
 
         # Gauss-Seidel iterative solver
         for i in range(1, n+1):
             pData[vLev][i] = (pData[vLev][i+1] + pData[vLev][i-1] - hx2[vLev]*rData[vLev][i-1])*0.5
 
-        #imposeBC(pData[vLev])
-
-        lData = (pData[vLev][2:] - 2.0*pData[vLev][1:-1] + pData[vLev][:-2])/hx2[vLev]
-        maxErr = np.amax(np.abs(rData[vLev] - lData))
+        maxErr = np.amax(np.abs(rData[vLev] - laplace(pData[vLev])))
         if maxErr < tolerance:
-            print(jCnt, maxErr)
             break
 
         jCnt += 1
         if jCnt > maxCount:
-            print("Iterative solver not converging.\n")
-            exit()
+            print("ERROR: Jacobi not converging. Aborting")
+            quit()
 
     imposeBC(pData[vLev])
 
-    return 0
 
-
-# Interpolates the data from an array of size 2^n + 1 to a larger array of size 2^(n + 1) + 1
+# Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
 def prolong():
     global N
     global vLev
@@ -280,12 +278,9 @@ def prolong():
 
 # Computes the 1D laplacian of function
 def laplace(function):
+    global hx2
     global vLev
-    global N, hx2
 
-    n = N[vLev]
-
-    laplacian = np.zeros(n)
     laplacian = (function[2:] - 2.0*function[1:-1] + function[:-2]) / hx2[vLev]
 
     return laplacian
@@ -296,9 +291,59 @@ def laplace(function):
 
 # The name of this function is self-explanatory. It imposes BC on P
 def imposeBC(P):
+    global zeroBC
+    global pWallX
+
+    '''
     # Neumann BC
+    # Left Wall
     P[0] = P[1]
+
+    # Right Wall
     P[-1] = P[-2]
+    '''
+
+    # Dirichlet BC
+    if zeroBC:
+        # Homogenous BC
+        # Left Wall
+        P[0] = -P[1]
+
+        # Right Wall
+        P[-1] = -P[-2]
+
+    else:
+        # Non-homogenous BC
+        # Left Wall
+        P[0] = 2.0*pWallX - P[1]
+
+        # Right Wall
+        P[-1] = 2.0*pWallX - P[-2]
+
+
+############################### TEST CASE DETAIL ################################
+
+
+# Calculate the analytical solution and its corresponding Dirichlet BC values
+def initDirichlet():
+    global N
+    global hx
+    global pWallX
+    global pAnlt, pData
+
+    n = N[0]
+
+    # Compute analytical solution, (r^2)/2
+    pAnlt = np.zeros_like(pData[0])
+
+    halfIndX = (n + 1)/2
+
+    xLen = 0.5
+    for i in range(n + 2):
+        xDist = hx[0]*(i - halfIndX)
+        pAnlt[i] = xDist*xDist/2.0
+
+    pWallX = xLen*xLen/2.0
 
 
 ############################### PLOTTING ROUTINE ################################
@@ -310,7 +355,6 @@ def imposeBC(P):
 # Any other value for plotType, and the function will barf.
 def plotResult(plotType):
     global N
-    global xPts
     global pAnlt
     global pData
     global rConv
@@ -320,6 +364,9 @@ def plotResult(plotType):
     plt.rcParams["font.weight"] = "medium"
 
     plt.figure(figsize=(13, 9))
+
+    n = N[0]
+    xPts = np.linspace(-0.5, 0.5, n+1)
 
     pSoln = pData[0]
     # Plot the computed solution on top of the analytic solution.
@@ -343,16 +390,15 @@ def plotResult(plotType):
         plt.xlabel('V-Cycles', fontsize=40)
         plt.ylabel('Residual', fontsize=40)
 
-        axes = plt.gca()
-        axes.xaxis.set_major_locator(MaxNLocator(integer=True))
+    axes = plt.gca()
+    axes.xaxis.set_major_locator(MaxNLocator(integer=True))
 
     plt.xticks(fontsize=30)
     plt.yticks(fontsize=30)
     plt.legend(fontsize=40)
     plt.show()
 
-
-################################ END OF PROGRAM #################################
+############################## THAT'S IT, FOLKS!! ###############################
 
 if __name__ == '__main__':
     main()

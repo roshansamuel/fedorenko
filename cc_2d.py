@@ -43,7 +43,7 @@ from matplotlib.ticker import MaxNLocator
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
 sInd = np.array([6, 6])
 
-# Depth of each V-cycle in multigrid
+# Depth of each V-cycle in multigrid (ideally VDepth = sInd - 1)
 VDepth = min(sInd) - 1
 
 # Number of V-cycles to be computed
@@ -59,7 +59,7 @@ pstSm = 3
 tolerance = 1.0e-6
 
 # N should be of the form 2^n
-# Then there will be 2^n + 2 points, including two ghost points
+# Then there will be 2^n + 2 points in total, including 2 ghost points
 sLst = [2**x for x in range(12)]
 
 # Get array of grid sizes are tuples corresponding to each level of V-Cycle
@@ -144,7 +144,7 @@ def multigrid(H):
         resVal = np.amax(np.abs(H[1:-1, 1:-1] - chMat))
         rConv[i] = resVal
 
-        print("Residual after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, resVal))
+        print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
 
     errVal = np.amax(np.abs(pAnlt[1:-1, 1:-1] - pData[0][1:-1, 1:-1]))
     print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
@@ -234,7 +234,7 @@ def calcResidual():
     iTemp[vLev] = rData[vLev] - laplace(pData[vLev])
 
 
-# Reduces the size of the array to a lower level, 2^(n - 1) + 1
+# Restricts the data from an array of size 2^n to a smaller array of size 2^(n - 1)
 def restrict():
     global N
     global vLev
@@ -251,11 +251,12 @@ def restrict():
             rData[vLev][i, k] = 0.25*(iTemp[pLev][i2 + 1, k2 + 1] + iTemp[pLev][i2, k2 + 1] + iTemp[pLev][i2 + 1, k2] + iTemp[pLev][i2, k2])
 
 
-# Solves at coarsest level using an iterative solver
+# Solves at coarsest level using the Gauss-Seidel iterative solver
 def solve():
     global N, vLev
     global gsFactor
     global maxCount
+    global tolerance
     global pData, rData
     global hx2, hz2, hzhx
 
@@ -285,7 +286,7 @@ def solve():
     imposeBC(pData[vLev])
 
 
-# Increases the size of the array to a higher level, 2^(n + 1) + 1
+# Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
 def prolong():
     global N
     global vLev
@@ -293,8 +294,6 @@ def prolong():
 
     pLev = vLev
     vLev -= 1
-
-    pData[vLev].fill(0.0)
 
     n = N[vLev]
     for i in range(1, n[0] + 1):
@@ -331,10 +330,10 @@ def imposeBC(P):
     # Right Wall
     P[-1, :] = P[-2, :]
 
-    # Bottom wall
+    # Bottom Wall
     P[:, 0] = P[:, 1]
 
-    # Top wall
+    # Top Wall
     P[:, -1] = P[:, -2]
     '''
 
@@ -347,10 +346,10 @@ def imposeBC(P):
         # Right Wall
         P[-1, :] = -P[-2, :]
 
-        # Bottom wall
+        # Bottom Wall
         P[:, 0] = -P[:, 1]
 
-        # Top wall
+        # Top Wall
         P[:, -1] = -P[:, -2]
 
     else:
@@ -361,10 +360,10 @@ def imposeBC(P):
         # Right Wall
         P[-1, :] = 2.0*pWallX - P[-2, :]
 
-        # Bottom wall
+        # Bottom Wall
         P[:, 0] = 2.0*pWallZ - P[:, 1]
 
-        # Top wall
+        # Top Wall
         P[:, -1] = 2.0*pWallZ - P[:, -2]
 
 
@@ -397,7 +396,7 @@ def plotResult(plotType):
         plt.plot(xPts, pSoln[1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
         plt.xlabel('x', fontsize=40)
         plt.ylabel('p', fontsize=40)
-    
+
     # Plot the error in computed solution with respect to analytic solution.
     elif plotType == 1:
         pErr = np.abs(pAnlt - pSoln[1:-1])
@@ -452,12 +451,8 @@ def initDirichlet():
 
         pWallZ[i] = (xDist*xDist + zLen*zLen)/4.0
 
-    # Value of P at walls according to analytical solution
-    #pWallX = pAnlt[1, :]
-    #pWallZ = pAnlt[:, 1]
 
-
-################################ END OF PROGRAM #################################
+############################## THAT'S IT, FOLKS!! ###############################
 
 if __name__ == '__main__':
     main()

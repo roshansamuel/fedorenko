@@ -59,7 +59,7 @@ pstSm = 3
 tolerance = 1.0e-6
 
 # N should be of the form 2^n
-# Then there will be 2^n + 2 points, including two ghost points
+# Then there will be 2^n + 2 points in total, including 2 ghost points
 sLst = [2**x for x in range(12)]
 
 # Get array of grid sizes are tuples corresponding to each level of V-Cycle
@@ -252,7 +252,7 @@ def calcResidual():
     iTemp[vLev] = rData[vLev] - laplace(pData[vLev])
 
 
-# Reduces the size of the array to a lower level, 2^(n - 1) + 1
+# Restricts the data from an array of size 2^n to a smaller array of size 2^(n - 1)
 def restrict():
     global N
     global vLev
@@ -268,11 +268,12 @@ def restrict():
                    iTemp[pLev][1::2, ::2, ::2] + iTemp[pLev][::2, 1::2, 1::2])/8
 
 
-# Solves at coarsest level using an iterative solver
+# Solves at coarsest level using the Gauss-Seidel iterative solver
 def solve():
     global N, vLev
     global gsFactor
     global maxCount
+    global tolerance
     global pData, rData
     global hyhz, hzhx, hxhy, hxhyhz
 
@@ -304,7 +305,7 @@ def solve():
     imposeBC(pData[vLev])
 
 
-# Increases the size of the array to a higher level, 2^(n + 1) + 1
+# Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
 def prolong():
     global N
     global vLev
@@ -312,8 +313,6 @@ def prolong():
 
     pLev = vLev
     vLev -= 1
-
-    pData[vLev].fill(0.0)
 
     n = N[vLev]
     for i in range(1, n[0] + 1):
@@ -327,10 +326,8 @@ def prolong():
 
 # Computes the 3D laplacian of function
 def laplace(function):
-    global N, vLev
+    global vLev
     global hx2, hy2, hz2
-
-    n = N[vLev]
 
     laplacian = ((function[:-2, 1:-1, 1:-1] - 2.0*function[1:-1, 1:-1, 1:-1] + function[2:, 1:-1, 1:-1])/hx2[vLev] + 
                  (function[1:-1, :-2, 1:-1] - 2.0*function[1:-1, 1:-1, 1:-1] + function[1:-1, 2:, 1:-1])/hy2[vLev] +
@@ -347,6 +344,27 @@ def imposeBC(P):
     global zeroBC
     global pWallX, pWallY, pWallZ
 
+    '''
+    # Neumann BC
+    # Left Wall
+    P[0, :, :] = P[1, :, :]
+
+    # Right Wall
+    P[-1, :, :] = P[-2, :, :]
+
+    # Front Wall
+    P[:, 0, :] = P[:, 1, :]
+
+    # Back Wall
+    P[:, -1, :] = P[:, -2, :]
+
+    # Bottom Wall
+    P[:, :, 0] = P[:, :, 1]
+
+    # Top Wall
+    P[:, :, -1] = P[:, :, -2]
+    '''
+
     # Dirichlet BC
     if zeroBC:
         # Homogenous BC
@@ -356,16 +374,16 @@ def imposeBC(P):
         # Right Wall
         P[-1, :, :] = -P[-2, :, :]
 
-        # Front wall
+        # Front Wall
         P[:, 0, :] = -P[:, 1, :]
 
-        # Back wall
+        # Back Wall
         P[:, -1, :] = -P[:, -2, :]
 
-        # Bottom wall
+        # Bottom Wall
         P[:, :, 0] = -P[:, :, 1]
 
-        # Top wall
+        # Top Wall
         P[:, :, -1] = -P[:, :, -2]
 
     else:
@@ -376,38 +394,17 @@ def imposeBC(P):
         # Right Wall
         P[-1, :, :] = 2.0*pWallX - P[-2, :, :]
 
-        # Front wall
+        # Front Wall
         P[:, 0, :] = 2.0*pWallY - P[:, 1, :]
 
-        # Back wall
+        # Back Wall
         P[:, -1, :] = 2.0*pWallY - P[:, -2, :]
 
-        # Bottom wall
+        # Bottom Wall
         P[:, :, 0] = 2.0*pWallZ - P[:, :, 1]
 
-        # Top wall
+        # Top Wall
         P[:, :, -1] = 2.0*pWallZ - P[:, :, -2]
-
-    '''
-    # Neumann boundary condition on pressure
-    # Left wall
-    P[0, :, :] = P[1, :, :]
-
-    # Right wall
-    P[-1, :, :] = P[-2, :, :]
-
-    # Front wall
-    P[:, 0, :] = P[:, 1, :]
-
-    # Back wall
-    P[:, -1, :] = P[:, -2, :]
-
-    # Bottom wall
-    P[:, :, 0] = P[:, :, 1]
-
-    # Top wall
-    P[:, :, -1] = P[:, :, -2]
-    '''
 
 
 ############################### PLOTTING ROUTINE ################################
@@ -439,7 +436,7 @@ def plotResult(plotType):
         plt.plot(xPts, pSoln[1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
         plt.xlabel('x', fontsize=40)
         plt.ylabel('p', fontsize=40)
-    
+
     # Plot the error in computed solution with respect to analytic solution.
     elif plotType == 1:
         pErr = np.abs(pAnlt - pSoln[1:-1])
@@ -501,7 +498,7 @@ def initDirichlet():
             pWallZ[i, j] = (xDist*xDist + yDist*yDist + zLen*zLen)/6.0
 
 
-################################ END OF PROGRAM #################################
+############################## THAT'S IT, FOLKS!! ###############################
 
 if __name__ == '__main__':
     main()

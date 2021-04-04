@@ -39,7 +39,7 @@ from matplotlib.ticker import MaxNLocator
 ############################### GLOBAL VARIABLES ################################
 
 # Get array of grid sizes are tuples corresponding to each level of V-Cycle
-N = [(grid.sLst[x[0]], grid.sLst[x[2]]) for x in [gv.sInd - y for y in range(gv.VDepth + 1)]]
+N = [(sLst[x[0]], sLst[x[1]]) for x in [sInd - y for y in range(VDepth + 1)]]
 
 # Define array of grid spacings along X
 hx = [1.0/(x[0]-1) for x in N]
@@ -54,10 +54,10 @@ hx2 = [x*x for x in hx]
 hz2 = [x*x for x in hz]
 
 # Cross product of hx and hz, used in finite difference formulae
-hzhx = [hx2[i]*hz2[i] for i in range(gv.VDepth + 1)]
+hzhx = [hx2[i]*hz2[i] for i in range(VDepth + 1)]
 
 # Factor in denominator of Gauss-Seidel iterations
-gsFactor = [1.0/(2.0*(hz2[i] +  hx2[i])) for i in range(gv.VDepth + 1)]
+gsFactor = [1.0/(2.0*(hz2[i] +  hx2[i])) for i in range(VDepth + 1)]
 
 # Maximum number of iterations while solving at coarsest level
 maxCount = 10*N[-1][0]*N[-1][1]
@@ -68,49 +68,78 @@ vLev = 0
 # Flag to determine if non-zero homogenous BC has to be applied or not
 zeroBC = False
 
+##################################### MAIN ######################################
+
+def main():
+    global N
+    global pData
+    global rData, sData, iTemp
+
+    nList = np.array(N)
+
+    rData = [np.zeros(tuple(x)) for x in nList]
+    pData = [np.zeros(tuple(x)) for x in nList + 2]
+
+    sData = [np.zeros_like(x) for x in pData]
+    iTemp = [np.zeros_like(x) for x in pData]
+
+    initDirichlet()
+
+    mgRHS = np.ones_like(pData[0])
+
+    # Solve
+    mgLHS = multigrid(mgRHS)
+
+    # Normalize solution for Neumann BC
+    #mgLHS -= np.mean(mgLHS[1:-1])
+
+    plotResult(2)
+
+
 ############################## MULTI-GRID SOLVER ###############################
 
-def multigrid(P, H):
+
+# The root function of MG-solver. And H is the RHS
+def multigrid(H):
     global N
+    global vcCnt
+    global rConv
     global pAnlt
     global pData, rData
 
-    chMat = np.zeros(N[0])
-    for i in range(gv.VDepth):
-        pData[i].fill(0.0)
-        rData[i].fill(0.0)
-        sData[i].fill(0.0)
-
-    pData[0][1:-1, 1:-1] = P[1:-1, 1:-1]
     rData[0] = H[1:-1, 1:-1]
+    chMat = np.zeros(N[0])
+    rConv = np.zeros(vcCnt)
 
-    for i in range(gv.vcCnt):
+    for i in range(vcCnt):
         v_cycle()
 
-        if gv.testPoisson:
-            chMat = laplace(pData[0])
+        chMat = laplace(pData[0])
+        resVal = np.amax(np.abs(H[1:-1, 1:-1] - chMat))
+        rConv[i] = resVal
 
-            resVal = np.amax(np.abs(H[1:-1, 1:-1] - chMat))
-            print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
+        print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
 
-            errVal = np.amax(np.abs(pAnlt[1:-1, 1:-1] - pData[0][1:-1, 1:-1]))
-            print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
+    errVal = np.amax(np.abs(pAnlt[1:-1, 1:-1] - pData[0][1:-1, 1:-1]))
+    print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
 
-    P[1:-1, 1:-1] = pData[0][1:-1, 1:-1]
+    return pData[0]
 
 
 # Multigrid V-cycle without the use of recursion
 def v_cycle():
+    global VDepth
     global vLev, zeroBC
+    global pstSm, preSm
 
     vLev = 0
     zeroBC = False
 
     # Pre-smoothing
-    smooth(gv.preSm)
+    smooth(preSm)
 
     zeroBC = True
-    for i in range(gv.VDepth):
+    for i in range(VDepth):
         # Compute residual
         calcResidual()
 
@@ -124,16 +153,14 @@ def v_cycle():
         pData[vLev].fill(0.0)
 
         # If the coarsest level is reached, solve. Otherwise, keep smoothing!
-        if vLev == gv.VDepth:
-            if gv.solveSol:
-                solve()
-            else:
-                smooth(gv.preSm + gv.pstSm)
+        if vLev == VDepth:
+            solve()
+            #smooth(preSm)
         else:
-            smooth(gv.preSm)
+            smooth(preSm)
 
     # Prolongation operations
-    for i in range(gv.VDepth):
+    for i in range(VDepth):
         # Prolong pressure to next finer level
         prolong()
 
@@ -147,7 +174,7 @@ def v_cycle():
             zeroBC = False
 
         # Post-smoothing
-        smooth(gv.pstSm)
+        smooth(pstSm)
 
 
 # Smoothens the solution sCount times using Gauss-Seidel smoother
@@ -205,6 +232,7 @@ def solve():
     global N, vLev
     global gsFactor
     global maxCount
+    global tolerance
     global pData, rData
     global hx2, hz2, hzhx
 
@@ -220,10 +248,10 @@ def solve():
             for j in range(1, n[1]+1):
                 pData[vLev][i, j] = (hz2[vLev]*(pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
                                      hx2[vLev]*(pData[vLev][i, j+1] + pData[vLev][i, j-1]) -
-                                     hzhx[vLev]*rData[vLev][i-1, j-1]) * gsFactor[vLev]
+                                    hzhx[vLev]*rData[vLev][i-1, j-1]) * gsFactor[vLev]
 
         maxErr = np.amax(np.abs(rData[vLev] - laplace(pData[vLev])))
-        if maxErr < gv.tolerance:
+        if maxErr < tolerance:
             break
 
         jCnt += 1
@@ -266,29 +294,13 @@ def prolong():
 
 # Computes the 2D laplacian of function
 def laplace(function):
-    global N, vLev
+    global vLev
     global hx2, hz2
 
-    n = N[vLev]
-
-    laplacian = ((function[:n[0], 1:-1] - 2.0*function[1:n[0]+1, 1:-1] + function[2:, 1:-1])/hx2[vLev] + 
-                 (function[1:-1, :n[1]] - 2.0*function[1:-1, 1:n[1]+1] + function[1:-1, 2:])/hz2[vLev])
+    laplacian = ((function[:-2, 1:-1] - 2.0*function[1:-1, 1:-1] + function[2:, 1:-1])/hx2[vLev] + 
+                 (function[1:-1, :-2] - 2.0*function[1:-1, 1:-1] + function[1:-1, 2:])/hz2[vLev])
 
     return laplacian
-
-
-# Initialize the arrays used in MG algorithm
-def initVariables():
-    global N
-    global pData, rData, sData, iTemp
-
-    nList = np.array(N)
-
-    rData = [np.zeros(tuple(x)) for x in nList]
-    pData = [np.zeros(tuple(x)) for x in nList + 2]
-
-    sData = [np.zeros_like(x) for x in pData]
-    iTemp = [np.zeros_like(x) for x in pData]
 
 
 ############################## BOUNDARY CONDITION ###############################
@@ -299,58 +311,49 @@ def imposeBC(P):
     global zeroBC
     global pWallX, pWallZ
 
-    if gv.testPoisson:
-        # Dirichlet BC
-        if zeroBC:
-            # Homogenous BC
-            # Left Wall
-            P[0, :] = -P[2, :]
+    '''
+    # Neumann BC
+    # Left Wall
+    P[0, :] = P[2, :]
 
-            # Right Wall
-            P[-1, :] = -P[-3, :]
+    # Right Wall
+    P[-1, :] = P[-3, :]
 
-            # Bottom wall
-            P[:, 0] = -P[:, 2]
+    # Bottom Wall
+    P[:, 0] = P[:, 2]
 
-            # Top wall
-            P[:, -1] = -P[:, -3]
+    # Top Wall
+    P[:, -1] = P[:, -3]
+    '''
 
-        else:
-            # Non-homogenous BC
-            # Left Wall
-            P[0, :] = 2.0*pWallX - P[2, :]
+    # Dirichlet BC
+    if zeroBC:
+        # Homogenous BC
+        # Left Wall
+        P[0, :] = -P[2, :]
 
-            # Right Wall
-            P[-1, :] = 2.0*pWallX - P[-3, :]
+        # Right Wall
+        P[-1, :] = -P[-3, :]
 
-            # Bottom wall
-            P[:, 0] = 2.0*pWallZ - P[:, 2]
+        # Bottom Wall
+        P[:, 0] = -P[:, 2]
 
-            # Top wall
-            P[:, -1] = 2.0*pWallZ - P[:, -3]
+        # Top Wall
+        P[:, -1] = -P[:, -3]
 
     else:
-        # Periodic BCs along X and Y directions
-        if gv.xyPeriodic:
-            # Left wall
-            P[0, :] = P[-3, :]
+        # Non-homogenous BC
+        # Left Wall
+        P[0, :] = 2.0*pWallX - P[2, :]
 
-            # Right wall
-            P[-1, :] = P[2, :]
+        # Right Wall
+        P[-1, :] = 2.0*pWallX - P[-3, :]
 
-        # Neumann boundary condition on pressure
-        else:
-            # Left wall
-            P[0, :] = P[2, :]
+        # Bottom Wall
+        P[:, 0] = 2.0*pWallZ - P[:, 2]
 
-            # Right wall
-            P[-1, :] = P[-3, :]
-
-        # Bottom wall
-        P[:, 0] = P[:, 2]
-
-        # Top wall
-        P[:, -1] = P[:, -3]
+        # Top Wall
+        P[:, -1] = 2.0*pWallZ - P[:, -3]
 
 
 ############################### TEST CASE DETAIL ################################
