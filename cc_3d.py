@@ -33,6 +33,7 @@
 
 # Import all necessary modules
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
@@ -130,10 +131,11 @@ def main():
     mgRHS = np.ones_like(pData[0])
 
     # Solve
+    t1 = datetime.now()
     mgLHS = multigrid(mgRHS)
+    t2 = datetime.now()
 
-    # Normalize solution for Neumann BC
-    #mgLHS -= np.mean(mgLHS[1:-1])
+    print("Time taken to solve equation: ", t2 - t1)
 
     plotResult(2)
 

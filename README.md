@@ -16,6 +16,7 @@ Hence the name of this repository.
 Please make sure that the following Python modules are installed before running any of the codes.
 
 * ``numpy`` - All array manipulations are performed using NumPy
+* ``datetime`` - The execution time is measured using this module
 * ``matplotlib`` - Results are plotted using the ``matplotlib`` library
 
 ## License
