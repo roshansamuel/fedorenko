@@ -249,7 +249,7 @@ def calcResidual():
     iTemp[vLev][1:-1, 1:-1, 1:-1] = rData[vLev] - laplace(pData[vLev])
 
 
-# Restricts the data from an array of size 2^n to a smaller array of size 2^(n - 1)
+# Restricts the data from an array of size 2^n + 1 to a smaller array of size 2^(n - 1) + 1
 def restrict():
     global N
     global vLev
@@ -321,7 +321,7 @@ def solve():
     imposeBC(pData[vLev])
 
 
-# Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
+# Interpolates the data from an array of size 2^n + 1 to a larger array of size 2^(n + 1) + 1
 def prolong():
     global N
     global vLev
@@ -406,16 +406,16 @@ def imposeBC(P):
         # Right Wall
         P[-1, :, :] = -P[-3, :, :]
 
-        # Front wall
+        # Front Wall
         P[:, 0, :] = -P[:, 2, :]
 
-        # Back wall
+        # Back Wall
         P[:, -1, :] = -P[:, -3, :]
 
-        # Bottom wall
+        # Bottom Wall
         P[:, :, 0] = -P[:, :, 2]
 
-        # Top wall
+        # Top Wall
         P[:, :, -1] = -P[:, :, -3]
 
     else:
@@ -426,17 +426,50 @@ def imposeBC(P):
         # Right Wall
         P[-1, :, :] = 2.0*pWallX - P[-3, :, :]
 
-        # Front wall
+        # Front Wall
         P[:, 0, :] = 2.0*pWallY - P[:, 2, :]
 
-        # Back wall
+        # Back Wall
         P[:, -1, :] = 2.0*pWallY - P[:, -3, :]
 
-        # Bottom wall
+        # Bottom Wall
         P[:, :, 0] = 2.0*pWallZ - P[:, :, 2]
 
-        # Top wall
+        # Top Wall
         P[:, :, -1] = 2.0*pWallZ - P[:, :, -3]
+
+
+############################### TEST CASE DETAIL ################################
+
+
+# Calculate the analytical solution and its corresponding Dirichlet BC values
+def initDirichlet():
+    global N
+    global hx, hy, hz
+    global pAnlt, pData
+    global pWallX, pWallY, pWallZ
+
+    n = N[0]
+
+    # Compute analytical solution, (r^2)/6
+    pAnlt = np.zeros_like(pData[0])
+
+    halfIndX = int(n[0]/2) + 1
+    halfIndY = int(n[1]/2) + 1
+    halfIndZ = int(n[2]/2) + 1
+
+    for i in range(n[0] + 2):
+        xDist = hx[0]*(i - halfIndX)
+        for j in range(n[1] + 2):
+            yDist = hy[0]*(j - halfIndY)
+            for k in range(n[2] + 2):
+                zDist = hz[0]*(k - halfIndZ)
+                pAnlt[i, j, k] = (xDist*xDist + yDist*yDist + zDist*zDist)/6.0
+
+    # Value of P at walls according to analytical solution
+    pWallX = pAnlt[1, :, :]
+    pWallY = pAnlt[:, 1, :]
+    pWallZ = pAnlt[:, :, 1]
 
 
 ############################### PLOTTING ROUTINE ################################
@@ -490,39 +523,6 @@ def plotResult(plotType):
     plt.yticks(fontsize=30)
     plt.legend(fontsize=40)
     plt.show()
-
-
-############################### TEST CASE DETAIL ################################
-
-
-# Calculate the analytical solution and its corresponding Dirichlet BC values
-def initDirichlet():
-    global N
-    global hx, hy, hz
-    global pAnlt, pData
-    global pWallX, pWallY, pWallZ
-
-    n = N[0]
-
-    # Compute analytical solution, (r^2)/6
-    pAnlt = np.zeros_like(pData[0])
-
-    halfIndX = int(n[0]/2) + 1
-    halfIndY = int(n[1]/2) + 1
-    halfIndZ = int(n[2]/2) + 1
-
-    for i in range(n[0] + 2):
-        xDist = hx[0]*(i - halfIndX)
-        for j in range(n[1] + 2):
-            yDist = hy[0]*(j - halfIndY)
-            for k in range(n[2] + 2):
-                zDist = hz[0]*(k - halfIndZ)
-                pAnlt[i, j, k] = (xDist*xDist + yDist*yDist + zDist*zDist)/6.0
-
-    # Value of P at walls according to analytical solution
-    pWallX = pAnlt[1, :, :]
-    pWallY = pAnlt[:, 1, :]
-    pWallZ = pAnlt[:, :, 1]
 
 
 ############################## THAT'S IT, FOLKS!! ###############################

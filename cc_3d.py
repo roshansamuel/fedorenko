@@ -386,6 +386,44 @@ def imposeBC(P):
         P[:, :, -1] = 2.0*pWallZ - P[:, :, -2]
 
 
+############################### TEST CASE DETAIL ################################
+
+
+# Calculate the analytical solution and its corresponding Dirichlet BC values
+def initDirichlet():
+    global N
+    global hx, hy, hz
+    global pAnlt, pData
+    global pWallX, pWallY, pWallZ
+
+    n = N[0]
+
+    # Compute analytical solution, (r^2)/6
+    pAnlt = np.zeros_like(pData[0])
+
+    halfIndX = (n[0] + 1)/2
+    halfIndY = (n[1] + 1)/2
+    halfIndZ = (n[2] + 1)/2
+
+    xLen, yLen, zLen = 0.5, 0.5, 0.5
+    pWallX = np.zeros_like(pData[0][0, :, :])
+    pWallY = np.zeros_like(pData[0][:, 0, :])
+    pWallZ = np.zeros_like(pData[0][:, :, 0])
+    for i in range(n[0] + 2):
+        xDist = hx[0]*(i - halfIndX)
+        for j in range(n[1] + 2):
+            yDist = hy[0]*(j - halfIndY)
+            for k in range(n[2] + 2):
+                zDist = hz[0]*(k - halfIndZ)
+                pAnlt[i, j, k] = (xDist*xDist + yDist*yDist + zDist*zDist)/6.0
+
+                pWallX[j, k] = (xLen*xLen + yDist*yDist + zDist*zDist)/6.0
+
+                pWallY[i, k] = (xDist*xDist + yLen*yLen + zDist*zDist)/6.0
+
+            pWallZ[i, j] = (xDist*xDist + yDist*yDist + zLen*zLen)/6.0
+
+
 ############################### PLOTTING ROUTINE ################################
 
 
@@ -437,44 +475,6 @@ def plotResult(plotType):
     plt.yticks(fontsize=30)
     plt.legend(fontsize=40)
     plt.show()
-
-
-############################### TEST CASE DETAIL ################################
-
-
-# Calculate the analytical solution and its corresponding Dirichlet BC values
-def initDirichlet():
-    global N
-    global hx, hy, hz
-    global pAnlt, pData
-    global pWallX, pWallY, pWallZ
-
-    n = N[0]
-
-    # Compute analytical solution, (r^2)/6
-    pAnlt = np.zeros_like(pData[0])
-
-    halfIndX = (n[0] + 1)/2
-    halfIndY = (n[1] + 1)/2
-    halfIndZ = (n[2] + 1)/2
-
-    xLen, yLen, zLen = 0.5, 0.5, 0.5
-    pWallX = np.zeros_like(pData[0][0, :, :])
-    pWallY = np.zeros_like(pData[0][:, 0, :])
-    pWallZ = np.zeros_like(pData[0][:, :, 0])
-    for i in range(n[0] + 2):
-        xDist = hx[0]*(i - halfIndX)
-        for j in range(n[1] + 2):
-            yDist = hy[0]*(j - halfIndY)
-            for k in range(n[2] + 2):
-                zDist = hz[0]*(k - halfIndZ)
-                pAnlt[i, j, k] = (xDist*xDist + yDist*yDist + zDist*zDist)/6.0
-
-                pWallX[j, k] = (xLen*xLen + yDist*yDist + zDist*zDist)/6.0
-
-                pWallY[i, k] = (xDist*xDist + yLen*yLen + zDist*zDist)/6.0
-
-            pWallZ[i, j] = (xDist*xDist + yDist*yDist + zLen*zLen)/6.0
 
 
 ############################## THAT'S IT, FOLKS!! ###############################

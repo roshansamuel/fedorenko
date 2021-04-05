@@ -446,6 +446,7 @@ def plotResult(plotType):
     plt.legend(fontsize=40)
     plt.show()
 
+
 ############################## THAT'S IT, FOLKS!! ###############################
 
 if __name__ == '__main__':

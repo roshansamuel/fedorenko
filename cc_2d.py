@@ -384,7 +384,6 @@ def initDirichlet():
         pWallZ[i] = (xDist*xDist + zLen*zLen)/4.0
 
 
-
 ############################### PLOTTING ROUTINE ################################
 
 
@@ -436,6 +435,7 @@ def plotResult(plotType):
     plt.yticks(fontsize=30)
     plt.legend(fontsize=40)
     plt.show()
+
 
 ############################## THAT'S IT, FOLKS!! ###############################
 

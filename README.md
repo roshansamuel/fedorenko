@@ -1,12 +1,14 @@
 # Fedorenko - Repository of Multigrid Solvers
 
 A collection of multigrid solvers in both cell-centered and vertex-centered configurations.
-For both cases, there are 1D, 2D and 3D versions, all packed into a single repository for future reference.
+There are 1D, 2D and 3D versions for both cases, all packed into a single repository to ease the development of multigrid solvers for those who wish to write one.
 All the solvers are written in Python.
-They are originally derived from the 1D version from the repository ``MG-Lite`` and from the fluid solver ``Orion``.
+They are derived from the repositories ``MG-Lite``, which demonstrates a 1D multigrid solver with GUI, and ``Orion``, a finite-difference fluid flow solver written in Python.
 
 The cell-centered versions have the prefix "cc", and the vertex-centered versions have the prefix "vc".
 The suffix indicates the dimensionality of the solver.
+All of them solve the Poisson equation on a domain with Dirichlet boundary conditions.
+They print the convergence of the residual with V-cycles, and plot it at the end of the run.
 
 The earliest version of multigrid algorithm is attributed to a paper by R. P. Fedorenko.
 Hence the name of this repository.
