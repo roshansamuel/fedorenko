@@ -32,7 +32,7 @@
 #################################################################################
 
 # Import all necessary modules
-#import cupy as cp
+import cupy as cp
 import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
@@ -43,7 +43,7 @@ from matplotlib.ticker import MaxNLocator
 # Choose the grid sizes as indices from below list so that there are 2^n + 2 grid points
 # Size index: 0 1 2 3  4  5  6  7   8   9   10   11   12   13    14
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
-sInd = np.array([5, 5, 5])
+sInd = np.array([7, 7, 7])
 
 # Depth of each V-cycle in multigrid
 VDepth = min(sInd) - 1
@@ -121,19 +121,20 @@ def main():
 
     nList = np.array(N)
 
-    pData = [np.zeros(tuple(x)) for x in nList + 2]
+    pData = [cp.zeros(tuple(x)) for x in nList + 2]
 
-    rData = [np.zeros_like(x) for x in pData]
-    sData = [np.zeros_like(x) for x in pData]
-    iTemp = [np.zeros_like(x) for x in pData]
+    rData = [cp.zeros_like(x) for x in pData]
+    sData = [cp.zeros_like(x) for x in pData]
+    iTemp = [cp.zeros_like(x) for x in pData]
 
     initDirichlet()
 
-    mgRHS = np.ones_like(pData[0])
+    mgRHS = cp.ones_like(pData[0])
 
     # Solve
     t1 = datetime.now()
     mgLHS = multigrid(mgRHS)
+    cp.cuda.Stream.null.synchronize()
     t2 = datetime.now()
 
     print("Time taken to solve equation: ", t2 - t1)
@@ -151,20 +152,20 @@ def multigrid(H):
     global pData, rData
 
     rData[0] = H
-    chMat = np.zeros(N[0])
-    rConv = np.zeros(vcCnt)
+    chMat = cp.zeros(N[0])
+    rConv = cp.zeros(vcCnt)
 
     for i in range(vcCnt):
         v_cycle()
 
         chMat = laplace(pData[0])
-        resVal = np.amax(np.abs(H[1:-1, 1:-1, 1:-1] - chMat))
+        resVal = float(cp.amax(cp.abs(H[1:-1, 1:-1, 1:-1] - chMat)))
         rConv[i] = resVal
 
         print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
 
-    errVal = np.amax(np.abs(pAnlt[1:-1, 1:-1, 1:-1] - pData[0][1:-1, 1:-1, 1:-1]))
-    print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
+    errVal = float(cp.amax(cp.abs(pAnlt[1:-1, 1:-1, 1:-1] - pData[0][1:-1, 1:-1, 1:-1])))
+    print("Error after V-Cycle {0:2d} is {1:4e}\n".format(i+1, errVal))
 
     return pData[0]
 
@@ -187,7 +188,7 @@ def v_cycle():
         calcResidual()
 
         # Copy smoothed pressure for later use
-        sData[vLev] = np.copy(pData[vLev])
+        sData[vLev] = cp.copy(pData[vLev])
 
         # Restrict to coarser level
         restrict()
@@ -376,7 +377,7 @@ def solve():
                                          hxhy[vLev]*(pData[vLev][2::2, 2::2, 3::2] + pData[vLev][2::2, 2::2, 1:-1:2]) -
                                         hxhyhz[vLev]*rData[vLev][2::2, 2::2, 2::2]) * gsFactor[vLev]
 
-        maxErr = np.amax(np.abs(rData[vLev][1:-1, 1:-1, 1:-1] - laplace(pData[vLev])))
+        maxErr = cp.amax(cp.abs(rData[vLev][1:-1, 1:-1, 1:-1] - laplace(pData[vLev])))
         if maxErr < tolerance:
             break
 
@@ -475,16 +476,16 @@ def initDirichlet():
     n = N[0]
 
     # Compute analytical solution, (r^2)/6
-    pAnlt = np.zeros_like(pData[0])
+    pAnlt = cp.zeros_like(pData[0])
 
     halfIndX = (n[0] + 1)/2
     halfIndY = (n[1] + 1)/2
     halfIndZ = (n[2] + 1)/2
 
     xLen, yLen, zLen = 0.5, 0.5, 0.5
-    pWallX = np.zeros_like(pData[0][0, :, :])
-    pWallY = np.zeros_like(pData[0][:, 0, :])
-    pWallZ = np.zeros_like(pData[0][:, :, 0])
+    pWallX = cp.zeros_like(pData[0][0, :, :])
+    pWallY = cp.zeros_like(pData[0][:, 0, :])
+    pWallZ = cp.zeros_like(pData[0][:, :, 0])
     for i in range(n[0] + 2):
         xDist = hx[0]*(i - halfIndX)
         for j in range(n[1] + 2):
