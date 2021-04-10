@@ -6,6 +6,7 @@ All the solvers are written in Python.
 They are derived from the repositories ``MG-Lite``, which demonstrates a 1D multigrid solver with GUI, and ``Orion``, a finite-difference fluid flow solver written in Python.
 
 The cell-centered versions have the prefix "cc", and the vertex-centered versions have the prefix "vc".
+GPU parallel versions of the solvers (under development) have the prefix "gpu", and are based on the cell-centered configuration.
 The suffix indicates the dimensionality of the solver.
 All of them solve the Poisson equation on a domain with Dirichlet boundary conditions.
 They print the convergence of the residual with V-cycles, and plot it at the end of the run.
