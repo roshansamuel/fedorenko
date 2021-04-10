@@ -43,7 +43,7 @@ from matplotlib.ticker import MaxNLocator
 # Choose the grid sizes as indices from below list so that there are 2^n + 2 grid points
 # Size index: 0 1 2 3  4  5  6  7   8   9   10   11   12   13    14
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
-sInd = np.array([7, 7, 7])
+sInd = np.array([8, 8, 8])
 
 # Depth of each V-cycle in multigrid
 VDepth = min(sInd) - 1
@@ -470,35 +470,27 @@ def imposeBC(P):
 def initDirichlet():
     global N
     global hx, hy, hz
-    global pAnlt, pData
-    global pWallX, pWallY, pWallZ
+    global pAnlt, pWallX, pWallY, pWallZ
 
     n = N[0]
 
-    # Compute analytical solution, (r^2)/6
-    pAnlt = cp.zeros_like(pData[0])
-
-    halfIndX = (n[0] + 1)/2
-    halfIndY = (n[1] + 1)/2
-    halfIndZ = (n[2] + 1)/2
-
     xLen, yLen, zLen = 0.5, 0.5, 0.5
-    pWallX = cp.zeros_like(pData[0][0, :, :])
-    pWallY = cp.zeros_like(pData[0][:, 0, :])
-    pWallZ = cp.zeros_like(pData[0][:, :, 0])
-    for i in range(n[0] + 2):
-        xDist = hx[0]*(i - halfIndX)
-        for j in range(n[1] + 2):
-            yDist = hy[0]*(j - halfIndY)
-            for k in range(n[2] + 2):
-                zDist = hz[0]*(k - halfIndZ)
-                pAnlt[i, j, k] = (xDist*xDist + yDist*yDist + zDist*zDist)/6.0
 
-                pWallX[j, k] = (xLen*xLen + yDist*yDist + zDist*zDist)/6.0
+    # Compute analytical solution, (r^2)/6
+    npax = np.newaxis
+    xCord = np.linspace(-0.5, 0.5 + hx[0], n[0] + 2, endpoint=True) - hx[0]/2
+    yCord = np.linspace(-0.5, 0.5 + hy[0], n[1] + 2, endpoint=True) - hy[0]/2
+    zCord = np.linspace(-0.5, 0.5 + hz[0], n[2] + 2, endpoint=True) - hz[0]/2
 
-                pWallY[i, k] = (xDist*xDist + yLen*yLen + zDist*zDist)/6.0
+    pAnlt = (xCord[:]*xCord[:] + yCord[:, npax]*yCord[:, npax] + zCord[:, npax, npax]*zCord[:, npax, npax])/6.0
+    pWallX = (xLen*xLen + yCord[:]*yCord[:] + zCord[:, npax]*zCord[:, npax])/6.0
+    pWallY = (xCord[:]*xCord[:] + yLen*yLen + zCord[:, npax]*zCord[:, npax])/6.0
+    pWallZ = (xCord[:]*xCord[:] + yCord[:, npax]*yCord[:, npax] + zLen*zLen)/6.0
 
-            pWallZ[i, j] = (xDist*xDist + yDist*yDist + zLen*zLen)/6.0
+    pAnlt = cp.array(pAnlt)
+    pWallX = cp.array(pWallX)
+    pWallY = cp.array(pWallY)
+    pWallZ = cp.array(pWallZ)
 
 
 ############################## THAT'S IT, FOLKS!! ###############################
