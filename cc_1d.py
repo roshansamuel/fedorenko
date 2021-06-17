@@ -44,6 +44,12 @@ from matplotlib.ticker import MaxNLocator
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
 sInd = 9
 
+# Flag to switch between uniform and non-uniform grid with tan-hyp stretching
+nuFlag = False
+
+# Stretching parameter for tangent-hyperbolic grid
+beta = 1.3
+
 # Depth of each V-cycle in multigrid (ideally VDepth = sInd - 1)
 VDepth = sInd - 1
 
@@ -97,6 +103,7 @@ def main():
     sData = [np.zeros_like(x) for x in pData]
     iTemp = [np.zeros_like(x) for x in rData]
 
+    initGrid()
     initDirichlet()
 
     mgRHS = np.ones_like(pData[0])
@@ -135,7 +142,7 @@ def multigrid(H):
 
         print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
 
-    errVal = np.amax(np.abs(pAnlt[1:-1] - pData[0][1:-1]))
+    errVal = np.amax(np.abs(pAnlt - pData[0][1:-1]))
     print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
 
     return pData[0]
@@ -197,6 +204,8 @@ def smooth(sCount):
     global N
     global hx2
     global vLev
+    global nuFlag
+    global xixx, xix2
     global rData, pData
 
     n = N[vLev]
@@ -204,8 +213,16 @@ def smooth(sCount):
         imposeBC(pData[vLev])
 
         # Gauss-Seidel smoothing
-        for j in range(1, n+1):
-            pData[vLev][j] = (pData[vLev][j+1] + pData[vLev][j-1] - hx2[vLev]*rData[vLev][j-1])/2
+        if nuFlag:
+            # For non-uniform grid
+            for j in range(1, n+1):
+                pData[vLev][j] = (xix2[vLev][j-1]*(pData[vLev][j+1] + pData[vLev][j-1])*2.0 +
+                                  xixx[vLev][j-1]*(pData[vLev][j+1] - pData[vLev][j-1])*hx[vLev] -
+                                 rData[vLev][j-1]*2.0*hx2[vLev]) / (4.0*xix2[vLev][j-1])
+        else:
+            # For uniform grid
+            for j in range(1, n+1):
+                pData[vLev][j] = (pData[vLev][j+1] + pData[vLev][j-1] - hx2[vLev]*rData[vLev][j-1])/2
 
     imposeBC(pData[vLev])
 
@@ -236,9 +253,11 @@ def restrict():
 # Solves at coarsest level using the Gauss-Seidel iterative solver
 def solve():
     global vLev
+    global nuFlag
     global N, hx2
     global maxCount
     global tolerance
+    global xixx, xix2
     global pData, rData
 
     n = N[vLev]
@@ -249,8 +268,16 @@ def solve():
         imposeBC(pData[vLev])
 
         # Gauss-Seidel iterative solver
-        for i in range(1, n+1):
-            pData[vLev][i] = (pData[vLev][i+1] + pData[vLev][i-1] - hx2[vLev]*rData[vLev][i-1])*0.5
+        if nuFlag:
+            # For non-uniform grid
+            for i in range(1, n+1):
+                pData[vLev][i] = (xix2[vLev][i-1]*(pData[vLev][i+1] + pData[vLev][i-1])*2.0 +
+                                  xixx[vLev][i-1]*(pData[vLev][i+1] - pData[vLev][i-1])*hx[vLev] -
+                                 rData[vLev][i-1]*2.0*hx2[vLev]) / (4.0*xix2[vLev][i-1])
+        else:
+            # For uniform grid
+            for i in range(1, n+1):
+                pData[vLev][i] = (pData[vLev][i+1] + pData[vLev][i-1] - hx2[vLev]*rData[vLev][i-1])*0.5
 
         maxErr = np.amax(np.abs(rData[vLev] - laplace(pData[vLev])))
         if maxErr < tolerance:
@@ -282,8 +309,16 @@ def prolong():
 def laplace(function):
     global hx2
     global vLev
+    global nuFlag
+    global xixx, xix2
 
-    laplacian = (function[2:] - 2.0*function[1:-1] + function[:-2]) / hx2[vLev]
+    if nuFlag:
+        # For non-uniform grid
+        laplacian = xix2[vLev]*(function[2:] - 2.0*function[1:-1] + function[:-2]) / hx2[vLev] + \
+                    xixx[vLev]*(function[2:] - function[:-2]) / (2.0*hx[vLev])
+    else:
+        # For uniform grid
+        laplacian = (function[2:] - 2.0*function[1:-1] + function[:-2]) / hx2[vLev]
 
     return laplacian
 
@@ -314,28 +349,49 @@ def imposeBC(P):
         P[-1] = 2.0*pWallX - P[-2]
 
 
+############################## GRID INITIALIZATION ##############################
+
+
+# Initialize the grid. This is relevant only for non-uniform grids
+def initGrid():
+    global N
+    global nuFlag
+    global xPts, xixx, xix2
+
+    # Uniform grid default values
+    xVts = [np.linspace(-0.5, 0.5, n+1) for n in N]
+    xPts = [(x[1:] + x[:-1])/2.0 for x in xVts]
+    xi_x = [np.ones_like(i) for i in xPts]
+    xix2 = [np.ones_like(i) for i in xPts]
+    xixx = [np.zeros_like(i) for i in xPts]
+
+    # Overwrite above arrays with values for tangent-hyperbolic grid is nuFlag is enabled.
+    if nuFlag:
+        for i in range(VDepth+1):
+            n = N[i]
+            xVts = np.linspace(0.0, 1.0, n+1)
+            xi = (xVts[1:] + xVts[:-1])/2.0
+            xPts[i] = np.array([(1.0 - np.tanh(beta*(1.0 - 2.0*i))/np.tanh(beta))/2.0 for i in xi])
+            xi_x[i] = np.array([np.tanh(beta)/(beta*(1.0 - ((1.0 - 2.0*k)*np.tanh(beta))**2.0)) for k in xPts[i]])
+            xixx[i] = np.array([-4.0*(np.tanh(beta)**3.0)*(1.0 - 2.0*k)/(beta*(1.0 - (np.tanh(beta)*(1.0 - 2.0*k))**2.0)**2.0) for k in xPts[i]])
+            xix2[i] = np.array([k*k for k in xi_x[i]])
+            xPts[i] -= 0.5
+
+
+
 ############################### TEST CASE DETAIL ################################
 
 
 # Calculate the analytical solution and its corresponding Dirichlet BC values
 def initDirichlet():
-    global N
-    global hx
+    global xPts
     global pWallX
     global pAnlt, pData
 
-    n = N[0]
-
     # Compute analytical solution, (r^2)/2
-    pAnlt = np.zeros_like(pData[0])
-
-    halfIndX = (n + 1)/2
+    pAnlt = xPts[0]*xPts[0]/2.0
 
     xLen = 0.5
-    for i in range(n + 2):
-        xDist = hx[0]*(i - halfIndX)
-        pAnlt[i] = xDist*xDist/2.0
-
     pWallX = xLen*xLen/2.0
 
 
@@ -348,6 +404,7 @@ def initDirichlet():
 # Any other value for plotType, and the function will barf.
 def plotResult(plotType):
     global N
+    global xPts
     global pAnlt
     global pData
     global rConv
@@ -359,20 +416,19 @@ def plotResult(plotType):
     plt.figure(figsize=(13, 9))
 
     n = N[0]
-    xPts = np.linspace(-0.5, 0.5, n+1)
 
     pSoln = pData[0]
     # Plot the computed solution on top of the analytic solution.
     if plotType == 0:
-        plt.plot(xPts, pAnlt, label='Analytic', marker='*', markersize=20, linewidth=4)
-        plt.plot(xPts, pSoln[1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
+        plt.plot(xPts[0], pAnlt, label='Analytic', marker='*', markersize=20, linewidth=4)
+        plt.plot(xPts[0], pSoln[1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
         plt.xlabel('x', fontsize=40)
         plt.ylabel('p', fontsize=40)
 
     # Plot the error in computed solution with respect to analytic solution.
     elif plotType == 1:
         pErr = np.abs(pAnlt - pSoln[1:-1])
-        plt.semilogy(xPts, pErr, label='Error', marker='*', markersize=20, linewidth=4)
+        plt.semilogy(xPts[0], pErr, label='Error', marker='*', markersize=20, linewidth=4)
         plt.xlabel('x', fontsize=40)
         plt.ylabel('e_p', fontsize=40)
 
@@ -390,6 +446,7 @@ def plotResult(plotType):
     plt.yticks(fontsize=30)
     plt.legend(fontsize=40)
     plt.show()
+
 
 ############################## THAT'S IT, FOLKS!! ###############################
 
