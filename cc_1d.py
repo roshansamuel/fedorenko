@@ -42,10 +42,10 @@ from matplotlib.ticker import MaxNLocator
 # Choose the grid size as an index from below list so that there are 2^n + 2 grid points
 # Size index: 0 1 2 3  4  5  6  7   8   9   10   11   12   13    14
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
-sInd = 9
+sInd = 6
 
 # Flag to switch between uniform and non-uniform grid with tan-hyp stretching
-nuFlag = False
+nuFlag = True
 
 # Stretching parameter for tangent-hyperbolic grid
 beta = 1.3
