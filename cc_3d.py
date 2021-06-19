@@ -313,21 +313,14 @@ def solve():
 
 # Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
 def prolong():
-    global N
     global vLev
     global pData
 
     pLev = vLev
     vLev -= 1
 
-    n = N[vLev]
-    for i in range(1, n[0] + 1):
-        i2 = int((i-1)/2) + 1
-        for j in range(1, n[1] + 1):
-            j2 = int((j-1)/2) + 1
-            for k in range(1, n[2] + 1):
-                k2 = int((k-1)/2) + 1
-                pData[vLev][i, j, k] = pData[pLev][i2, j2, k2]
+    pData[vLev][1:-1:2, 1:-1:2, 1:-1:2] = pData[vLev][2::2, 1:-1:2, 1:-1:2] = pData[vLev][1:-1:2, 2::2, 1:-1:2] = pData[vLev][1:-1:2, 1:-1:2, 2::2] = \
+    pData[vLev][2::2, 2::2, 1:-1:2] = pData[vLev][1:-1:2, 2::2, 2::2] = pData[vLev][2::2, 1:-1:2, 2::2] = pData[vLev][2::2, 2::2, 2::2] = pData[pLev][1:-1, 1:-1, 1:-1]
 
 
 # Computes the 3D laplacian of function

@@ -238,25 +238,14 @@ def calcResidual():
 
 # Restricts the data from an array of size 2^n to a smaller array of size 2^(n - 1)
 def restrict():
-    global N
     global vLev
     global iTemp, rData
 
     pLev = vLev
     vLev += 1
 
-    '''
-    rData[vLev] = (iTemp[pLev][::2, ::2, ::2] + iTemp[pLev][1::2, 1::2, 1::2] +
-                   iTemp[pLev][::2, ::2, 1::2] + iTemp[pLev][1::2, 1::2, ::2] +
-                   iTemp[pLev][::2, 1::2, ::2] + iTemp[pLev][1::2, ::2, 1::2] +
-                   iTemp[pLev][1::2, ::2, ::2] + iTemp[pLev][::2, 1::2, 1::2])/8
-    '''
-    n = N[vLev]
-    for i in range(n[0]):
-        i2 = i*2
-        for k in range(n[1]):
-            k2 = k*2
-            rData[vLev][i, k] = 0.25*(iTemp[pLev][i2 + 1, k2 + 1] + iTemp[pLev][i2, k2 + 1] + iTemp[pLev][i2 + 1, k2] + iTemp[pLev][i2, k2])
+    rData[vLev] = (iTemp[pLev][::2, ::2] + iTemp[pLev][1::2, 1::2] +
+                   iTemp[pLev][1::2, ::2] + iTemp[pLev][::2, 1::2])/4
 
 
 # Solves at coarsest level using the Gauss-Seidel iterative solver
@@ -309,19 +298,13 @@ def solve():
 
 # Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
 def prolong():
-    global N
     global vLev
     global pData
 
     pLev = vLev
     vLev -= 1
 
-    n = N[vLev]
-    for i in range(1, n[0] + 1):
-        i2 = int((i-1)/2) + 1
-        for k in range(1, n[1] + 1):
-            k2 = int((k-1)/2) + 1
-            pData[vLev][i, k] = pData[pLev][i2, k2]
+    pData[vLev][1:-1:2, 1:-1:2] = pData[vLev][1:-1:2, 2::2] = pData[vLev][2::2, 1:-1:2] = pData[vLev][2::2, 2::2] = pData[pLev][1:-1, 1:-1]
 
 
 # Computes the 2D laplacian of function
