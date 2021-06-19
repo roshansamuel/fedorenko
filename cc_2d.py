@@ -44,7 +44,13 @@ from matplotlib.ticker import MaxNLocator
 # Grid sizes: 1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384
 sInd = np.array([6, 6])
 
-# Depth of each V-cycle in multigrid (ideally VDepth = sInd - 1)
+# Flag to switch between uniform and non-uniform grid with tan-hyp stretching
+nuFlag = True
+
+# Stretching parameter for tangent-hyperbolic grid
+beta = 1.0
+
+# Depth of each V-cycle in multigrid
 VDepth = min(sInd) - 1
 
 # Number of V-cycles to be computed
@@ -65,26 +71,6 @@ sLst = [2**x for x in range(12)]
 
 # Get array of grid sizes are tuples corresponding to each level of V-Cycle
 N = [(sLst[x[0]], sLst[x[1]]) for x in [sInd - y for y in range(VDepth + 1)]]
-
-# Define array of grid spacings along X
-h0 = 1.0/(N[0][0])
-hx = [h0*(2**x) for x in range(VDepth+1)]
-
-# Define array of grid spacings along Z
-h0 = 1.0/(N[0][1])
-hz = [h0*(2**x) for x in range(VDepth+1)]
-
-# Square of hx, used in finite difference formulae
-hx2 = [x*x for x in hx]
-
-# Square of hz, used in finite difference formulae
-hz2 = [x*x for x in hz]
-
-# Cross product of hx and hz, used in finite difference formulae
-hzhx = [hx2[i]*hz2[i] for i in range(VDepth + 1)]
-
-# Factor in denominator of Gauss-Seidel iterations
-gsFactor = [1.0/(2.0*(hz2[i] +  hx2[i])) for i in range(VDepth + 1)]
 
 # Maximum number of iterations while solving at coarsest level
 maxCount = 10*N[-1][0]*N[-1][1]
@@ -110,6 +96,7 @@ def main():
     sData = [np.zeros_like(x) for x in pData]
     iTemp = [np.zeros_like(x) for x in rData]
 
+    initGrid()
     initDirichlet()
 
     mgRHS = np.ones_like(pData[0])
@@ -121,7 +108,7 @@ def main():
 
     print("Time taken to solve equation: ", t2 - t1)
 
-    plotResult(2)
+    plotResult(0)
 
 
 ############################## MULTI-GRID SOLVER ###############################
@@ -148,7 +135,7 @@ def multigrid(H):
 
         print("Residual after V-Cycle {0:2d} is {1:.4e}".format(i+1, resVal))
 
-    errVal = np.amax(np.abs(pAnlt[1:-1, 1:-1] - pData[0][1:-1, 1:-1]))
+    errVal = np.amax(np.abs(pAnlt - pData[0][1:-1, 1:-1]))
     print("Error after V-Cycle {0:2d} is {1:.4e}\n".format(i+1, errVal))
 
     return pData[0]
@@ -209,20 +196,33 @@ def v_cycle():
 def smooth(sCount):
     global N
     global vLev
-    global gsFactor
+    global nuFlag
     global rData, pData
-    global hx2, hz2, hzhx
+    global ihx2, i2hx, ihz2, i2hz
+    global xixx, xix2, ztzz, ztz2
 
     n = N[vLev]
     for iCnt in range(sCount):
         imposeBC(pData[vLev])
 
         # Gauss-Seidel smoothing
-        for i in range(1, n[0]+1):
-            for j in range(1, n[1]+1):
-                pData[vLev][i, j] = (hz2[vLev]*(pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
-                                     hx2[vLev]*(pData[vLev][i, j+1] + pData[vLev][i, j-1]) -
-                                     hzhx[vLev]*rData[vLev][i-1, j-1]) * gsFactor[vLev]
+        if nuFlag:
+            # For non-uniform grid
+            for i in range(1, n[0]+1):
+                for j in range(1, n[1]+1):
+                    pData[vLev][i, j] = (xix2[vLev][i-1] * ihx2[vLev] * (pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
+                                         xixx[vLev][i-1] * i2hx[vLev] * (pData[vLev][i+1, j] - pData[vLev][i-1, j]) +
+                                         ztz2[vLev][j-1] * ihz2[vLev] * (pData[vLev][i, j+1] + pData[vLev][i, j-1]) +
+                                         ztzz[vLev][j-1] * i2hz[vLev] * (pData[vLev][i, j+1] - pData[vLev][i, j-1]) -
+                                        rData[vLev][i-1, j-1]) / (2.0*(ihx2[vLev]*xix2[vLev][i-1] +
+                                                                       ihz2[vLev]*ztz2[vLev][j-1]))
+        else:
+            # For uniform grid
+            for i in range(1, n[0]+1):
+                for j in range(1, n[1]+1):
+                    pData[vLev][i, j] = (ihx2[vLev] * (pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
+                                         ihz2[vLev] * (pData[vLev][i, j+1] + pData[vLev][i, j-1]) -
+                                        rData[vLev][i-1, j-1]) / (2.0*(ihx2[vLev] + ihz2[vLev]))
 
     imposeBC(pData[vLev])
 
@@ -238,29 +238,25 @@ def calcResidual():
 
 # Restricts the data from an array of size 2^n to a smaller array of size 2^(n - 1)
 def restrict():
-    global N
     global vLev
     global iTemp, rData
 
     pLev = vLev
     vLev += 1
 
-    n = N[vLev]
-    for i in range(n[0]):
-        i2 = i*2
-        for k in range(n[1]):
-            k2 = k*2
-            rData[vLev][i, k] = 0.25*(iTemp[pLev][i2 + 1, k2 + 1] + iTemp[pLev][i2, k2 + 1] + iTemp[pLev][i2 + 1, k2] + iTemp[pLev][i2, k2])
+    rData[vLev] = (iTemp[pLev][::2, ::2] + iTemp[pLev][1::2, 1::2] +
+                   iTemp[pLev][1::2, ::2] + iTemp[pLev][::2, 1::2])/4
 
 
 # Solves at coarsest level using the Gauss-Seidel iterative solver
 def solve():
     global N, vLev
-    global gsFactor
+    global nuFlag
     global maxCount
     global tolerance
     global pData, rData
-    global hx2, hz2, hzhx
+    global ihx2, i2hx, ihz2, i2hz
+    global xixx, xix2, ztzz, ztz2
 
     n = N[vLev]
     solLap = np.zeros(n)
@@ -270,11 +266,23 @@ def solve():
         imposeBC(pData[vLev])
 
         # Gauss-Seidel iterative solver
-        for i in range(1, n[0]+1):
-            for j in range(1, n[1]+1):
-                pData[vLev][i, j] = (hz2[vLev]*(pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
-                                     hx2[vLev]*(pData[vLev][i, j+1] + pData[vLev][i, j-1]) -
-                                    hzhx[vLev]*rData[vLev][i-1, j-1]) * gsFactor[vLev]
+        if nuFlag:
+            # For non-uniform grid
+            for i in range(1, n[0]+1):
+                for j in range(1, n[1]+1):
+                    pData[vLev][i, j] = (xix2[vLev][i-1] * ihx2[vLev] * (pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
+                                         xixx[vLev][i-1] * i2hx[vLev] * (pData[vLev][i+1, j] - pData[vLev][i-1, j]) +
+                                         ztz2[vLev][j-1] * ihz2[vLev] * (pData[vLev][i, j+1] + pData[vLev][i, j-1]) +
+                                         ztzz[vLev][j-1] * i2hz[vLev] * (pData[vLev][i, j+1] - pData[vLev][i, j-1]) -
+                                        rData[vLev][i-1, j-1]) / (2.0*(ihx2[vLev]*xix2[vLev][i-1] +
+                                                                       ihz2[vLev]*ztz2[vLev][j-1]))
+        else:
+            # For uniform grid
+            for i in range(1, n[0]+1):
+                for j in range(1, n[1]+1):
+                    pData[vLev][i, j] = (ihx2[vLev] * (pData[vLev][i+1, j] + pData[vLev][i-1, j]) +
+                                         ihz2[vLev] * (pData[vLev][i, j+1] + pData[vLev][i, j-1]) -
+                                        rData[vLev][i-1, j-1]) / (2.0*(ihx2[vLev] + ihz2[vLev]))
 
         maxErr = np.amax(np.abs(rData[vLev] - laplace(pData[vLev])))
         if maxErr < tolerance:
@@ -282,36 +290,40 @@ def solve():
 
         jCnt += 1
         if jCnt > maxCount:
-            print("ERROR: Jacobi not converging. Aborting")
-            quit()
+            print("WARNING: Iterative solver not converging at coarsest level")
+            break
 
     imposeBC(pData[vLev])
 
 
 # Interpolates the data from an array of size 2^n to a larger array of size 2^(n + 1)
 def prolong():
-    global N
     global vLev
     global pData
 
     pLev = vLev
     vLev -= 1
 
-    n = N[vLev]
-    for i in range(1, n[0] + 1):
-        i2 = int((i-1)/2) + 1
-        for k in range(1, n[1] + 1):
-            k2 = int((k-1)/2) + 1
-            pData[vLev][i, k] = pData[pLev][i2, k2]
+    pData[vLev][1:-1:2, 1:-1:2] = pData[vLev][1:-1:2, 2::2] = pData[vLev][2::2, 1:-1:2] = pData[vLev][2::2, 2::2] = pData[pLev][1:-1, 1:-1]
 
 
 # Computes the 2D laplacian of function
 def laplace(function):
     global vLev
-    global hx2, hz2
+    global nuFlag
+    global ihx2, i2hx, ihz2, i2hz
+    global xixx, xix2, ztzz, ztz2
 
-    laplacian = ((function[:-2, 1:-1] - 2.0*function[1:-1, 1:-1] + function[2:, 1:-1])/hx2[vLev] + 
-                 (function[1:-1, :-2] - 2.0*function[1:-1, 1:-1] + function[1:-1, 2:])/hz2[vLev])
+    if nuFlag:
+        # For non-uniform grid
+        laplacian = (xix2[vLev] * ihx2[vLev] * (function[2:, 1:-1] - 2.0*function[1:-1, 1:-1] + function[:-2, 1:-1]) + \
+                     xixx[vLev] * i2hx[vLev] * (function[2:, 1:-1] - function[:-2, 1:-1]) +
+                     ztz2[vLev] * ihz2[vLev] * (function[1:-1, 2:] - 2.0*function[1:-1, 1:-1] + function[1:-1, :-2]) + \
+                     ztzz[vLev] * i2hz[vLev] * (function[1:-1, 2:] - function[1:-1, :-2]))
+    else:
+        # For uniform grid
+        laplacian = ((function[:-2, 1:-1] - 2.0*function[1:-1, 1:-1] + function[2:, 1:-1]) * ihx2[vLev] + 
+                     (function[1:-1, :-2] - 2.0*function[1:-1, 1:-1] + function[1:-1, 2:]) * ihz2[vLev])
 
     return laplacian
 
@@ -354,36 +366,102 @@ def imposeBC(P):
         P[:, -1] = 2.0*pWallZ - P[:, -2]
 
 
+############################## GRID INITIALIZATION ##############################
+
+
+# Initialize the grid. This is relevant only for non-uniform grids
+def initGrid():
+    global N
+    global nuFlag
+    global hx, xPts, i2hx, ihx2, xixx, xix2
+    global hz, zPts, i2hz, ihz2, ztzz, ztz2
+
+    hx0 = 1.0/(N[0][0])
+    hz0 = 1.0/(N[0][1])
+
+    hx = np.zeros(VDepth+1)
+    hz = np.zeros(VDepth+1)
+
+    ihx2 = np.zeros(VDepth+1)
+    ihz2 = np.zeros(VDepth+1)
+
+    i2hx = np.zeros(VDepth+1)
+    i2hz = np.zeros(VDepth+1)
+
+    for i in range(VDepth+1):
+        hx[i] = hx0*(2**i)
+        hz[i] = hz0*(2**i)
+
+        ihx2[i] = 1.0/(hx[i]*hx[i])
+        ihz2[i] = 1.0/(hz[i]*hz[i])
+
+        i2hx[i] = 1.0/(2.0*hx[i])
+        i2hz[i] = 1.0/(2.0*hz[i])
+
+    # Uniform grid default values
+    vPts = [np.linspace(-0.5, 0.5, n[0]+1) for n in N]
+    xPts = [(x[1:] + x[:-1])/2.0 for x in vPts]
+    xi_x = [np.ones_like(i) for i in xPts]
+    xix2 = [np.ones_like(i) for i in xPts]
+    xixx = [np.zeros_like(i) for i in xPts]
+
+    vPts = [np.linspace(-0.5, 0.5, n[1]+1) for n in N]
+    zPts = [(z[1:] + z[:-1])/2.0 for z in vPts]
+    zt_z = [np.ones_like(i) for i in zPts]
+    ztz2 = [np.ones_like(i) for i in zPts]
+    ztzz = [np.zeros_like(i) for i in zPts]
+
+    # Overwrite above arrays with values for tangent-hyperbolic grid is nuFlag is enabled.
+    if nuFlag:
+        for i in range(VDepth+1):
+            n = N[i]
+
+            vPts = np.linspace(0.0, 1.0, n[0]+1)
+            xi = (vPts[1:] + vPts[:-1])/2.0
+            xPts[i] = np.array([(1.0 - np.tanh(beta*(1.0 - 2.0*i))/np.tanh(beta))/2.0 for i in xi])
+            xi_x[i] = np.array([np.tanh(beta)/(beta*(1.0 - ((1.0 - 2.0*k)*np.tanh(beta))**2.0)) for k in xPts[i]])
+            xixx[i] = np.array([-4.0*(np.tanh(beta)**3.0)*(1.0 - 2.0*k)/(beta*(1.0 - (np.tanh(beta)*(1.0 - 2.0*k))**2.0)**2.0) for k in xPts[i]])
+            xix2[i] = np.array([k*k for k in xi_x[i]])
+            xPts[i] -= 0.5
+
+            vPts = np.linspace(0.0, 1.0, n[1]+1)
+            zt = (vPts[1:] + vPts[:-1])/2.0
+            zPts[i] = np.array([(1.0 - np.tanh(beta*(1.0 - 2.0*i))/np.tanh(beta))/2.0 for i in zt])
+            zt_z[i] = np.array([np.tanh(beta)/(beta*(1.0 - ((1.0 - 2.0*k)*np.tanh(beta))**2.0)) for k in zPts[i]])
+            ztzz[i] = np.array([-4.0*(np.tanh(beta)**3.0)*(1.0 - 2.0*k)/(beta*(1.0 - (np.tanh(beta)*(1.0 - 2.0*k))**2.0)**2.0) for k in zPts[i]])
+            ztz2[i] = np.array([k*k for k in zt_z[i]])
+            zPts[i] -= 0.5
+
+    # Reshape arrays to make it easier to multiply with 3D arrays
+    xixx = [x[:, np.newaxis] for x in xixx]
+    xix2 = [x[:, np.newaxis] for x in xix2]
+
+
 ############################### TEST CASE DETAIL ################################
 
 
 # Calculate the analytical solution and its corresponding Dirichlet BC values
 def initDirichlet():
     global N
-    global hx, hz
+    global xPts, zPts
     global pAnlt, pData
     global pWallX, pWallZ
 
-    n = N[0]
+    xLen, zLen = 0.5, 0.5
 
     # Compute analytical solution, (r^2)/4
-    pAnlt = np.zeros_like(pData[0])
+    pAnlt = np.zeros(N[0])
+    x = xPts[0]
+    z = zPts[0]
 
-    halfIndX = (n[0] + 1)/2
-    halfIndZ = (n[1] + 1)/2
+    npax = np.newaxis
+    pAnlt = (x[:, npax]**2 + z[:]**2)/4.0
 
-    xLen, zLen = 0.5, 0.5
-    pWallX = np.zeros(n[0] + 2)
-    pWallZ = np.zeros(n[1] + 2)
-    for i in range(n[0] + 2):
-        xDist = hx[0]*(i - halfIndX)
-        for j in range(n[1] + 2):
-            zDist = hz[0]*(j - halfIndZ)
-            pAnlt[i, j] = (xDist*xDist + zDist*zDist)/4.0
+    pWallX = np.zeros_like(pData[0][0, :])
+    pWallZ = np.zeros_like(pData[0][:, 0])
 
-            pWallX[j] = (xLen*xLen + zDist*zDist)/4.0
-
-        pWallZ[i] = (xDist*xDist + zLen*zLen)/4.0
+    pWallX[1:-1] = (xLen**2 + z[:]**2)/4.0
+    pWallZ[1:-1] = (x[:]**2 + zLen**2)/4.0
 
 
 ############################### PLOTTING ROUTINE ################################
@@ -395,6 +473,7 @@ def initDirichlet():
 # Any other value for plotType, and the function will barf.
 def plotResult(plotType):
     global N
+    global zPts
     global pAnlt
     global pData
     global rConv
@@ -406,20 +485,20 @@ def plotResult(plotType):
     plt.figure(figsize=(13, 9))
 
     n = N[0]
-    xPts = np.linspace(-0.5, 0.5, n[0]+1)
+    xMid = int(n[0]/2)
 
     pSoln = pData[0]
     # Plot the computed solution on top of the analytic solution.
     if plotType == 0:
-        plt.plot(xPts, pAnlt, label='Analytic', marker='*', markersize=20, linewidth=4)
-        plt.plot(xPts, pSoln[1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
+        plt.plot(zPts[0], pAnlt[xMid, :], label='Analytic', marker='*', markersize=20, linewidth=4)
+        plt.plot(zPts[0], pSoln[xMid, 1:-1], label='Computed', marker='+', markersize=20, linewidth=4)
         plt.xlabel('x', fontsize=40)
         plt.ylabel('p', fontsize=40)
 
     # Plot the error in computed solution with respect to analytic solution.
     elif plotType == 1:
-        pErr = np.abs(pAnlt - pSoln[1:-1])
-        plt.semilogy(xPts, pErr, label='Error', marker='*', markersize=20, linewidth=4)
+        pErr = np.abs(pAnlt - pSoln[1:-1, 1:-1])
+        plt.semilogy(zPts[0], pErr[xMid, :], label='Error', marker='*', markersize=20, linewidth=4)
         plt.xlabel('x', fontsize=40)
         plt.ylabel('e_p', fontsize=40)
 
